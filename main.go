@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"html/template"
 	"io"
@@ -12,6 +13,27 @@ import (
 
 	"golang.org/x/crypto/ssh"
 )
+
+// CompStats
+type CompStats struct {
+	ModelName   string
+	CPUMhz      string
+	CacheSize   string
+	MemTotal    string
+	MemFree     string
+	SwapCached  string
+	FirstLoad   string
+	SecondLoad  string
+	ThirdLoad   string
+	TotalLoad   string
+	UpTime      string
+	IdleTime    string
+	CurrentUser string
+	HostName    string
+	Chassis     string
+	Operating   string
+	Kernel      string
+}
 
 type pidstats struct {
 	pid                   string
@@ -68,6 +90,7 @@ type pidstats struct {
 	exit_code             string
 }
 
+var computer CompStats
 var pids map[int]pidstats
 
 func main() {
@@ -80,7 +103,7 @@ func main() {
 }
 
 func login(response http.ResponseWriter, request *http.Request) {
-	fmt.Println("method:", request.Method) // Get request method
+	fmt.Println("login METHOD:", request.Method)
 
 	switch request.Method {
 	case "GET":
@@ -94,38 +117,76 @@ func login(response http.ResponseWriter, request *http.Request) {
 		var port string = fmt.Sprint(request.Form["port"][0])
 		connect(username, password, ip, port, response, request)
 	}
-
-	/*
-		if request.Method == "GET" {
-			t, _ := template.ParseFiles("index.html")
-			t.Execute(response, nil)
-		} else {
-			request.ParseForm()
-			var username string = fmt.Sprint(request.Form["username"][0])
-			var password string = fmt.Sprint(request.Form["password"][0])
-			var ip string = fmt.Sprint(request.Form["ip"][0])
-			connect(username, password, ip)
-
-			//output := []byte("Temporary Empty Page. . . ")
-			//response.Write(output)
-			//fmt.Println("Page is loading")
-		}
-	*/
 }
 
 func monitor(response http.ResponseWriter, request *http.Request) {
-	//output := []byte("Temporary Empty Page. . . ")
-	//response.Write(output)
+	fmt.Println("monitor METHOD:", request.Method)
 
-	fmt.Println("method:", request.Method) // Get request method
-
-	switch request.Method {
-	case "GET":
-		t, _ := template.ParseFiles("monitor.html")
-		t.Execute(response, nil)
-	case "POST":
-		fmt.Println("What am I even posting")
+	html := `
+	<p>
+	{{.CurrentUser}}@{{.HostName}}
+	Model Name: {{.ModelName}}
+	Operating System: {{.Operating}}
+	Kernel: {{.Kernel}}
+	Chassis: {{.Chassis}}
+	<br>
+	Cache Size: {{.CacheSize}}
+	Swap Cache: {{.SwapCached}}
+	RAM Memory: {{.MemFree}}/{{.MemTotal}}
+	<br>
+	Tasks: {{.TotalLoad}}
+	Load Average: {{.FirstLoad}} {{.SecondLoad}} {{.ThirdLoad}}
+	</p>
+	`
+	data := computer
+	buf := &bytes.Buffer{}
+	t := template.Must(template.New("").Parse(html))
+	if err := t.Execute(buf, data); err != nil {
+		panic(err)
 	}
+	body := buf.String()
+	body = strings.Replace(body, "\n", "<br>", -1)
+
+	/////////////////////////////////////////////////////////
+
+	/*
+		html2 := `
+		<table>
+			<tr>
+				<th>First Load</th>
+				<th>Second Load</th>
+				<th>Third Load</th>
+				<th>Total Load</th>
+			</tr>
+			<tr>
+				<td>{{.FirstLoad}}</td>
+				<td>{{.SecondLoad}}</td>
+				<td>{{.ThirdLoad}}</td>
+				<td>{{.TotalLoad}}</td>
+			</tr>
+		</table>
+		`
+
+		data2 := computer
+
+		buf2 := &bytes.Buffer{}
+		t2 := template.Must(template.New("template1").Parse(html2))
+		if err := t2.Execute(buf2, data2); err != nil {
+			panic(err)
+		}
+		body2 := buf2.String()
+		body2 = strings.Replace(body2, "\n", "<br>", -1)
+		fmt.Fprint(response, body2)
+
+		/*
+			switch request.Method {
+			case "GET":
+				t, _ := template.ParseFiles("monitor.html")
+				t.Execute(response, nil)
+			case "POST":
+				fmt.Println("What am I even posting")
+			}
+	*/
 }
 
 func connect(username string, password string, ip string, port string, response http.ResponseWriter, request *http.Request) {
@@ -196,11 +257,15 @@ func connect(username string, password string, ip string, port string, response 
 			fmt.Println(<-out)
 		*/
 
-		//getCPUInfo(in, out)
+		getCPUInfo(in, out)
 		getMemInfo(in, out)
-		//getUptime(in, out)
+		getUptime(in, out)
+		getLoadAvg(in, out)
+		getUser(in, out)
+		getHostInfo(in, out)
 		//getProcesses(in, out)
 		//printMap()
+		fmt.Printf("%+v\n", computer)
 
 		// automatically "exit"
 		in <- "exit"
@@ -217,18 +282,53 @@ func printMap() {
 }
 
 func getCPUInfo(in chan<- string, out <-chan string) {
-	in <- "cat /proc/cpuinfo"
-	out2Slice(out, "\n")
+	in <- "cat /proc/cpuinfo | egrep 'model name|cpu MHz|cache size'"
+	slice := out2Slice(out, "\n")
+	hold := parseSemicolon(slice)
+	computer.ModelName = hold[0]
+	computer.CPUMhz = hold[1]
+	computer.CacheSize = hold[2]
 }
 
 func getMemInfo(in chan<- string, out <-chan string) {
-	in <- "cat /proc/meminfo"
-	out2Slice(out, "\n")
+	in <- "cat /proc/meminfo | egrep 'MemTotal|MemFree|SwapCached'"
+	slice := out2Slice(out, "\n")
+	hold := parseSemicolon(slice)
+	computer.MemTotal = hold[0]
+	computer.MemFree = hold[1]
+	computer.SwapCached = hold[2]
 }
 
 func getUptime(in chan<- string, out <-chan string) {
 	in <- "cat /proc/uptime"
-	out2Slice(out, " ")
+	slice := strings.Fields(<-out)
+	computer.UpTime = slice[0]
+	computer.IdleTime = slice[1]
+}
+
+func getLoadAvg(in chan<- string, out <-chan string) {
+	in <- "cat /proc/loadavg"
+	slice := out2Slice(out, " ")
+	computer.FirstLoad = slice[0]
+	computer.SecondLoad = slice[1]
+	computer.ThirdLoad = slice[2]
+	computer.TotalLoad = slice[3]
+}
+
+func getUser(in chan<- string, out <-chan string) {
+	in <- "whoami"
+	slice := strings.Fields(<-out)
+	computer.CurrentUser = slice[0]
+}
+
+func getHostInfo(in chan<- string, out <-chan string) {
+	in <- "hostnamectl | egrep 'Static hostname|Chassis|Operating System|Kernel'"
+	slice := out2Slice(out, "\n")
+	hold := parseSemicolon(slice)
+	computer.HostName = hold[0]
+	computer.Chassis = hold[1]
+	computer.Operating = hold[2]
+	computer.Kernel = hold[3]
 }
 
 func getProcesses(in chan<- string, out <-chan string) {
@@ -266,14 +366,23 @@ func getProcesses(in chan<- string, out <-chan string) {
 	}
 }
 
-//func out2Slice(out <-chan string, split string) []string {
-func out2Slice(out <-chan string, split string) {
+func out2Slice(out <-chan string, split string) []string {
 	//var s string = <-out
 	slice := strings.Split(<-out, split)
 	for i, v := range slice {
 		fmt.Print(strconv.Itoa(i) + ") ")
 		fmt.Println(v)
 	}
+	return slice
+}
+
+func parseSemicolon(slice []string) []string {
+	var hold []string
+	for i := 0; i < len(slice)-1; i++ {
+		s := strings.Split(slice[i], ":")
+		hold = append(hold, strings.TrimSpace(s[1]))
+	}
+	return hold
 }
 
 // MuxShell =
