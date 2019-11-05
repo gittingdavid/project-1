@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"fmt"
 	"html/template"
 	"io"
@@ -14,7 +13,7 @@ import (
 	"golang.org/x/crypto/ssh"
 )
 
-// CompStats
+// CompStats =
 type CompStats struct {
 	ModelName   string
 	CPUMhz      string
@@ -35,66 +34,69 @@ type CompStats struct {
 	Kernel      string
 }
 
-type pidstats struct {
-	pid                   string
-	comm                  string
-	state                 string
-	ppid                  string
-	pgrp                  string
-	session               string
-	tty_nr                string
-	tpgid                 string
-	flags                 string
-	minflt                string
-	cminflt               string
-	majflt                string
-	cmajflt               string
-	utime                 string
-	stime                 string
-	cutime                string
-	cstime                string
-	priority              string
-	nice                  string
-	num_threads           string
-	itrealvalue           string
-	starttime             string
-	vsize                 string
-	rss                   string
-	rsslim                string
-	startcode             string
-	encode                string
-	startstack            string
-	kstkesp               string
-	kstkeip               string
-	signal                string
-	blocked               string
-	sigignore             string
-	sigcatch              string
-	wchan                 string
-	nswap                 string
-	cnswap                string
-	exit_signal           string
-	processor             string
-	rt_priority           string
-	policy                string
-	delayacct_blkio_ticks string
-	guest_time            string
-	cguest_time           string
-	start_data            string
-	end_data              string
-	start_brk             string
-	arg_start             string
-	arg_end               string
-	env_start             string
-	env_end               string
-	exit_code             string
+// PidStats =
+type PidStats struct {
+	Pid         string
+	Cmd         string
+	State       string
+	Ppid        string
+	Pgrp        string
+	Session     string
+	TtyNr       string
+	Tpgid       string
+	Flags       string
+	Minflt      string
+	Cminflt     string
+	Majflt      string
+	Cmajflt     string
+	Utime       string
+	Stime       string
+	Cutime      string
+	Cstime      string
+	Priority    string
+	Nice        string
+	NumThreads  string
+	Itrealvalue string
+	Starttime   string
+	Vsize       string
+	Rss         string
+	Rsslim      string
+	Startcode   string
+	Encode      string
+	Startstack  string
+	Kstkesp     string
+	Kstkeip     string
+	Signal      string
+	Blocked     string
+	Sigignore   string
+	Sigcatch    string
+	Wchan       string
+	Nswap       string
+	Cnswap      string
+	ExitSignal  string
+	Processor   string
+	RtPriority  string
+	Policy      string
+	Delays      string
+	GuestTime   string
+	CguestTime  string
+	StartData   string
+	EndData     string
+	StartBrk    string
+	ArgStart    string
+	ArgEnd      string
+	EnvStart    string
+	EnvEnd      string
+	ExitCode    string
 }
 
 var computer CompStats
-var pids map[int]pidstats
+
+// Pids =
+var Pids map[int]PidStats
 
 func main() {
-	pids = make(map[int]pidstats)
+	Pids = make(map[int]PidStats)
 	http.Handle("/", http.FileServer(http.Dir(".")))
 	http.HandleFunc("/login", login)
 	http.HandleFunc("/monitor", monitor)
@@ -124,69 +126,56 @@ func monitor(response http.ResponseWriter, request *http.Request) {
 
 	html := `
 	<p>
-	{{.CurrentUser}}@{{.HostName}}
-	Model Name: {{.ModelName}}
-	Operating System: {{.Operating}}
-	Kernel: {{.Kernel}}
-	Chassis: {{.Chassis}}
+	{{.CurrentUser}}@{{.HostName}}<br>
+	Model Name: {{.ModelName}}<br>
+	Operating System: {{.Operating}}<br>
+	Kernel: {{.Kernel}}<br>
+	Chassis: {{.Chassis}}<br>
 	<br>
-	Cache Size: {{.CacheSize}}
-	Swap Cache: {{.SwapCached}}
-	RAM Memory: {{.MemFree}}/{{.MemTotal}}
+	Cache Size: {{.CacheSize}}<br>
+	Swap Cache: {{.SwapCached}}<br>
+	RAM Memory: {{.MemFree}}/{{.MemTotal}}<br>
 	<br>
-	Tasks: {{.TotalLoad}}
-	Load Average: {{.FirstLoad}} {{.SecondLoad}} {{.ThirdLoad}}
+	Tasks: {{.TotalLoad}}<br>
+	Load Average: {{.FirstLoad}} {{.SecondLoad}} {{.ThirdLoad}}<br>
 	</p>
 	`
-	data := computer
-	buf := &bytes.Buffer{}
-	t := template.Must(template.New("").Parse(html))
-	if err := t.Execute(buf, data); err != nil {
-		panic(err)
-	}
-	body := buf.String()
-	body = strings.Replace(body, "\n", "<br>", -1)
 
-	/////////////////////////////////////////////////////////
+	html2 := `
+	<table>
+	<tr>
+		<td>PID</td>
+		<td>CMD</td>
+		<td>State</td>
+		<td>PPID</td>
+		<td>Priority</td>
+		<td>Nice</td>
+		<td>VIRT</td>
+		<td>RES</td>
+		<td>Session</td>
+		<td>EnvStart</td>
+	</tr>
+	{{range $key, $value := .}}
+	<tr>
+		<td>{{$value.Pid}}</td>
+		<td>{{$value.Cmd}}</td>
+		<td>{{$value.State}}</td>
+		<td>{{$value.Ppid}}</td>
+		<td>{{$value.Priority}}</td>
+		<td>{{$value.Nice}}</td>
+		<td>{{$value.Vsize}}</td>
+		<td>{{$value.Rss}}</td>
+		<td>{{$value.Session}}</td>
+		<td>{{$value.EnvStart}}</td>
+	</tr>
+	{{end}}
+	`
 
-	/*
-		html2 := `
-		<table>
-			<tr>
-				<th>First Load</th>
-				<th>Second Load</th>
-				<th>Third Load</th>
-				<th>Total Load</th>
-			</tr>
-			<tr>
-				<td>{{.FirstLoad}}</td>
-				<td>{{.SecondLoad}}</td>
-				<td>{{.ThirdLoad}}</td>
-				<td>{{.TotalLoad}}</td>
-			</tr>
-		</table>
-		`
+	template1 := template.Must(template.New("").Parse(html))
+	template1.Execute(response, computer)
 
-		data2 := computer
-
-		buf2 := &bytes.Buffer{}
-		t2 := template.Must(template.New("template1").Parse(html2))
-		if err := t2.Execute(buf2, data2); err != nil {
-			panic(err)
-		}
-		body2 := buf2.String()
-		body2 = strings.Replace(body2, "\n", "<br>", -1)
-		fmt.Fprint(response, body2)
-
-		/*
-			switch request.Method {
-			case "GET":
-				t, _ := template.ParseFiles("monitor.html")
-				t.Execute(response, nil)
-			case "POST":
-				fmt.Println("What am I even posting")
-			}
-	*/
+	template2 := template.Must(template.New("").Parse(html2))
+	template2.Execute(response, Pids)
 }
 
 func connect(username string, password string, ip string, port string, response http.ResponseWriter, request *http.Request) {
@@ -263,9 +252,11 @@ func connect(username string, password string, ip string, port string, response 
 		getLoadAvg(in, out)
 		getUser(in, out)
 		getHostInfo(in, out)
-		//getProcesses(in, out)
-		//printMap()
+		getProcesses(in, out)
+
 		fmt.Printf("%+v\n", computer)
+		fmt.Println()
+		//printMap()
 
 		// automatically "exit"
 		in <- "exit"
@@ -275,7 +266,7 @@ func connect(username string, password string, ip string, port string, response 
 }
 
 func printMap() {
-	for _, v := range pids {
+	for _, v := range Pids {
 		fmt.Printf("%+v", v)
 		fmt.Print("\n\n")
 	}
@@ -352,7 +343,7 @@ func getProcesses(in chan<- string, out <-chan string) {
 		data := strings.Fields(<-out)
 
 		if data[0] != "cat:" {
-			pids[v] = pidstats{
+			Pids[v] = PidStats{
 				data[0], data[1], data[2], data[3], data[4], data[5], data[6],
 				data[7], data[8], data[9], data[10], data[11], data[12], data[13],
 				data[14], data[15], data[16], data[17], data[18], data[19], data[20],
